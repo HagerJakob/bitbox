@@ -68,16 +68,28 @@ function GamePage() {
     <main className="scanlines min-h-screen px-5 py-8 md:px-10 md:py-12">
       <div className="mx-auto max-w-6xl">
         <header className="arcade-panel mb-6 rounded-2xl p-6 md:p-8">
-          <Link
-            to="/"
-            className="mb-5 inline-block text-xs uppercase tracking-[0.2em] text-cyan-200/80 hover:text-cyan-100"
-          >
-            &larr; Zurueck
-          </Link>
-          <h1 className="pixel-font mb-4 text-lg leading-relaxed text-white md:text-2xl">{selectedGame.title}</h1>
-          <p className="text-sm text-cyan-100/80">
-            LED-Matrix-Feed: {isConnected ? 'Live mit ESP32 verbunden' : 'Lokal simuliert'}
-          </p>
+          <div className="flex flex-col items-start justify-between gap-5 md:flex-row md:items-center">
+            <div>
+              <Link
+                to="/"
+                className="mb-5 inline-block text-xs uppercase tracking-[0.2em] text-cyan-200/80 hover:text-cyan-100"
+              >
+                &larr; Zurueck
+              </Link>
+              <h1 className="pixel-font mb-4 text-lg leading-relaxed text-white md:text-2xl">{selectedGame.title}</h1>
+              <p className="text-sm text-cyan-100/80">
+                LED-Matrix-Feed: {isConnected ? 'Live mit ESP32 verbunden' : 'Lokal simuliert'}
+              </p>
+            </div>
+
+            <div className="logo-halo self-center">
+              <img
+                src="/BitBoxLogo_Vector.svg"
+                alt="Bitbox Logo"
+                className="w-28 drop-shadow-[0_0_32px_rgba(40,245,255,1)] md:w-40"
+              />
+            </div>
+          </div>
         </header>
 
         <section className="grid grid-cols-1 gap-4 lg:grid-cols-[1.2fr_0.8fr]">

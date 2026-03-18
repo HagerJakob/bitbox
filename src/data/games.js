@@ -9,14 +9,14 @@ export const games = [
   {
     slug: 'tetris',
     title: 'Tetris',
-    icon: '🧱',
+    iconImage: '/Tetris.svg',
     subtitle: 'Stack with precision.',
     accent: 'var(--neon-pink)',
   },
   {
     slug: 'vier-gewinnt',
     title: '4 Gewinnt',
-    icon: '🔴',
+    iconImage: '/viergewinnt.svg',
     subtitle: 'Drop and connect four.',
     accent: 'var(--neon-cyan)',
   },

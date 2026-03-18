@@ -1,0 +1,280 @@
+Bitbox - ESP32 <-> Website (Web Bluetooth) Integrationsleitfaden
+================================================================
+
+Ziel
+----
+Die Website soll sich per Bluetooth mit dem ESP32 verbinden,
+aktuelle 16x16 LED-Zustaende vom ESP32 empfangen und optional
+Matrixdaten an den ESP32 senden.
+
+Die Matrix hat 16x16 = 256 LEDs.
+Empfohlenes Datenformat: 256 Bits = 32 Bytes (bit-gepackt).
+
+
+1) Was der ESP32-Code beinhalten muss
+=====================================
+
+1.1 BLE-Server + Service + Characteristics
+------------------------------------------
+Definiere einen eigenen BLE-Service (oder nimm den bereits verwendeten UUID-Bereich):
+
+SERVICE_UUID            = 6e400001-b5a3-f393-e0a9-e50e24dcca9e
+CHAR_LED_STATE_UUID     = 6e400003-b5a3-f393-e0a9-e50e24dcca9e   (READ + NOTIFY)
+CHAR_LED_WRITE_UUID     = 6e400002-b5a3-f393-e0a9-e50e24dcca9e   (WRITE oder WRITE_NR)
+CHAR_STATUS_UUID        = 6e400004-b5a3-f393-e0a9-e50e24dcca9e   (READ + NOTIFY, optional)
+
+Hinweis:
+- CHAR_LED_STATE_UUID sendet den aktuellen Matrix-Zustand vom ESP32 zur Website.
+- CHAR_LED_WRITE_UUID empfaengt Matrixdaten von der Website am ESP32.
+
+1.2 Werbeparameter (Advertising)
+--------------------------------
+- Device Name setzen, z.B. "Bitbox-ESP32"
+- Service UUID im Advertising bekannt machen.
+
+Dadurch kann die Website gefiltert nur Bitbox-Geraete anzeigen.
+
+1.3 Datenformat fuer LED-Matrix (wichtig)
+-----------------------------------------
+Empfohlenes Nutzdatenformat pro Frame:
+
+Byte 0:  version (z.B. 1)
+Byte 1:  rows (16)
+Byte 2:  cols (16)
+Byte 3:  frameCounter (0-255, rollover)
+Byte 4..35: 32 Bytes LED Bitmap (bit-gepackt)
+Byte 36: checksum (optional, XOR ueber Byte 0..35)
+
+Gesamt: 37 Bytes pro Frame
+
+Alternativ ohne Header: nur 32 Bytes.
+Dann muessen Website und ESP32 fix auf 16x16 eingestellt sein.
+
+1.4 ESP32 muss Notifications senden
+-----------------------------------
+Wenn sich die Matrix aendert (oder zyklisch), dann:
+- charLedState.setValue(frameBytes, len)
+- charLedState.notify()
+
+Wichtig:
+- Notifications nur senden, wenn ein Client verbunden ist.
+- Intervall z.B. 20-100 ms (je nach Last).
+
+1.5 ESP32 muss Write-Callback verarbeiten
+-----------------------------------------
+Auf CHAR_LED_WRITE_UUID:
+- eingehende Daten lesen
+- validieren (Laenge/Version/Checksum)
+- in interne 16x16 Matrix schreiben
+- physische LED-Matrix aktualisieren
+
+1.6 Disconnect/Reconnect robust behandeln
+-----------------------------------------
+- OnConnect: Status setzen
+- OnDisconnect: Werbung neu starten
+
+
+2) ESP32 Pseudocode (NimBLE/Arduino-Style)
+==========================================
+
+// globale Matrix
+bool matrix[16][16];
+uint8_t frameCounter = 0;
+
+uint8_t packBit(const bool m[16][16], int bitIndex) {
+  int y = bitIndex / 16;
+  int x = bitIndex % 16;
+  return m[y][x] ? 1 : 0;
+}
+
+void buildFrame(uint8_t* out37) {
+  out37[0] = 1;     // version
+  out37[1] = 16;    // rows
+  out37[2] = 16;    // cols
+  out37[3] = frameCounter++;
+
+  // 32 bytes bitmap
+  for (int i = 0; i < 32; i++) out37[4 + i] = 0;
+
+  for (int bit = 0; bit < 256; bit++) {
+    int byteIndex = 4 + (bit / 8);
+    int bitPos = bit % 8;
+    if (packBit(matrix, bit)) out37[byteIndex] |= (1 << bitPos);
+  }
+
+  uint8_t csum = 0;
+  for (int i = 0; i < 36; i++) csum ^= out37[i];
+  out37[36] = csum;
+}
+
+void notifyMatrixIfConnected() {
+  if (!clientConnected) return;
+
+  uint8_t frame[37];
+  buildFrame(frame);
+  ledStateCharacteristic.setValue(frame, 37);
+  ledStateCharacteristic.notify();
+}
+
+void onWriteFromWebsite(const uint8_t* data, size_t len) {
+  // akzeptiere 37-Byte Frame oder 32-Byte raw bitmap
+  if (len == 37) {
+    // validate header/checksum, dann bitmap aus Byte 4..35 lesen
+  } else if (len == 32) {
+    // direkt bitmap lesen
+  } else {
+    return;
+  }
+
+  // matrix[][] aktualisieren
+  // physische LEDs rendern
+}
+
+
+3) Was im Website-Code enthalten sein muss
+==========================================
+
+3.1 Browser Voraussetzungen
+---------------------------
+- HTTPS oder localhost
+- Chromium-basierter Browser mit Web Bluetooth
+- Nutzeraktion fuer requestDevice (Button-Klick)
+
+3.2 BLE-Verbindung herstellen
+-----------------------------
+Ablauf:
+1) navigator.bluetooth.requestDevice(...)
+2) device.gatt.connect()
+3) server.getPrimaryService(SERVICE_UUID)
+4) service.getCharacteristic(CHAR_LED_STATE_UUID)
+5) service.getCharacteristic(CHAR_LED_WRITE_UUID)
+6) ledStateChar.startNotifications()
+7) event listener auf characteristicvaluechanged
+
+3.3 Eingehende LED-Daten in 2D Array umwandeln
+----------------------------------------------
+- DataView/Uint8Array aus Event lesen
+- Header parsen (falls 37-Byte Frame)
+- 32 Byte bitmap in bool[16][16] dekodieren
+- React State aktualisieren: setMatrix(decoded)
+
+3.4 Optional: Matrix von Website an ESP32 schreiben
+---------------------------------------------------
+- Lokale Matrix in 32 oder 37 Bytes serialisieren
+- ledWriteChar.writeValueWithoutResponse(payload)
+
+3.5 Disconnect behandeln
+------------------------
+- device.addEventListener('gattserverdisconnected', ...)
+- UI-Status auf "Nicht verbunden"
+- Reconnect-Flow erlauben
+
+
+4) Website Minimalbeispiel (anpassbar an BluetoothConnector.jsx)
+================================================================
+
+Konstanten:
+const SERVICE_UUID = '6e400001-b5a3-f393-e0a9-e50e24dcca9e'
+const CHAR_LED_WRITE_UUID = '6e400002-b5a3-f393-e0a9-e50e24dcca9e'
+const CHAR_LED_STATE_UUID = '6e400003-b5a3-f393-e0a9-e50e24dcca9e'
+
+Connect:
+async function connect() {
+  const device = await navigator.bluetooth.requestDevice({
+    filters: [{ namePrefix: 'Bitbox' }],
+    optionalServices: [SERVICE_UUID],
+  })
+
+  const server = await device.gatt.connect()
+  const service = await server.getPrimaryService(SERVICE_UUID)
+
+  const ledStateChar = await service.getCharacteristic(CHAR_LED_STATE_UUID)
+  const ledWriteChar = await service.getCharacteristic(CHAR_LED_WRITE_UUID)
+
+  await ledStateChar.startNotifications()
+  ledStateChar.addEventListener('characteristicvaluechanged', (event) => {
+    const value = event.target.value
+    const bytes = new Uint8Array(value.buffer)
+
+    const matrix = decodeFrameToMatrix(bytes)
+    setMatrix(matrix)
+  })
+
+  setBleRefs({ device, server, service, ledStateChar, ledWriteChar })
+}
+
+Decode:
+function decodeFrameToMatrix(bytes) {
+  let bitmapOffset = 0
+
+  // 37-byte frame with header
+  if (bytes.length >= 37 && bytes[0] === 1 && bytes[1] === 16 && bytes[2] === 16) {
+    bitmapOffset = 4
+  }
+
+  const matrix = Array.from({ length: 16 }, () => Array(16).fill(false))
+
+  for (let bit = 0; bit < 256; bit++) {
+    const byteIndex = bitmapOffset + Math.floor(bit / 8)
+    const bitPos = bit % 8
+    const on = ((bytes[byteIndex] >> bitPos) & 1) === 1
+
+    const y = Math.floor(bit / 16)
+    const x = bit % 16
+    matrix[y][x] = on
+  }
+
+  return matrix
+}
+
+Write:
+async function sendMatrix(ledWriteChar, matrix) {
+  const payload = new Uint8Array(32)
+
+  for (let bit = 0; bit < 256; bit++) {
+    const y = Math.floor(bit / 16)
+    const x = bit % 16
+    if (matrix[y][x]) {
+      payload[Math.floor(bit / 8)] |= 1 << (bit % 8)
+    }
+  }
+
+  await ledWriteChar.writeValueWithoutResponse(payload)
+}
+
+
+5) Mapping auf deinen aktuellen Bitbox-Code
+===========================================
+
+Aktuell in BluetoothConnector.jsx bereits vorhanden:
+- requestDevice + connect
+- UI status
+- lokale Sync-Simulation
+
+Fuer echte Daten vom ESP32 musst du ergaenzen:
+- getPrimaryService(SERVICE_UUID)
+- getCharacteristic(CHAR_LED_STATE_UUID)
+- startNotifications + characteristicvaluechanged
+- decodeFrameToMatrix(...) und setMatrix(...) im Game State
+- optional getCharacteristic(CHAR_LED_WRITE_UUID) fuer write-back
+
+Empfehlung fuer Struktur:
+- BLE Verbindung und Characteristic-Referenzen in BluetoothConnector verwalten
+- Matrix State zentral in GamePage halten
+- onMatrixReceived(matrix) callback von BluetoothConnector -> GamePage
+
+
+6) Debug-Checkliste
+===================
+
+- ESP32 advertised SERVICE_UUID?
+- Website requestDevice optionalServices/filter korrekt?
+- Charakteristik Properties stimmen? (READ/NOTIFY/WRITE)
+- Notification wirklich gestartet? (startNotifications)
+- Datenlaenge korrekt? (32 oder 37 Bytes)
+- Bit-Reihenfolge auf ESP und Website identisch?
+- Disconnect-Event behandelt?
+
+
+Wenn du willst, kann ich als naechsten Schritt den echten BLE-Empfang direkt in deine
+bestehende React-Komponente einbauen (inkl. decode/encode und Live-Update der LEDMatrix).
