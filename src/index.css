@@ -1,0 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Orbitron:wght@500;700;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-main: #02030a;
+  --bg-alt: #070b1d;
+  --neon-cyan: #28f5ff;
+  --neon-pink: #ff4fd8;
+  --neon-green: #73ff7c;
+  --panel-border: rgba(40, 245, 255, 0.4);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Orbitron', sans-serif;
+  color: #d9fbff;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 79, 216, 0.2), transparent 35%),
+    radial-gradient(circle at 88% 20%, rgba(40, 245, 255, 0.2), transparent 40%),
+    linear-gradient(160deg, var(--bg-main), var(--bg-alt));
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.pixel-font {
+  font-family: 'Press Start 2P', cursive;
+}
+
+.arcade-panel {
+  background: linear-gradient(145deg, rgba(10, 16, 40, 0.88), rgba(4, 8, 24, 0.9));
+  border: 1px solid var(--panel-border);
+  box-shadow:
+    0 0 18px rgba(40, 245, 255, 0.14),
+    0 0 36px rgba(255, 79, 216, 0.12),
+    inset 0 0 14px rgba(115, 255, 124, 0.08);
+  border-radius: 1rem;
+}
+
+.scanlines {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanlines::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.05) 0,
+    rgba(255, 255, 255, 0.05) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  mix-blend-mode: soft-light;
+}
+
+.game-card {
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.game-card:hover {
+  transform: translateY(-4px) scale(1.015);
+  box-shadow:
+    0 0 22px rgba(115, 255, 124, 0.28),
+    0 0 36px rgba(255, 79, 216, 0.24);
+  border-color: rgba(115, 255, 124, 0.7);
+}
+
+.led-cell {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 2px;
+  border: 1px solid rgba(40, 245, 255, 0.12);
+  transition: background-color 120ms linear, box-shadow 120ms linear;
+}
+
+.led-cell.on {
+  background: var(--neon-green);
+  box-shadow: 0 0 8px rgba(115, 255, 124, 0.9), 0 0 16px rgba(115, 255, 124, 0.65);
+}
+
+.led-cell.off {
+  background: rgba(6, 18, 22, 0.95);
+}
